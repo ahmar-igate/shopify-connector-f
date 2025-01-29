@@ -23,7 +23,8 @@ function App() {
     created_at_max: null,
   });
 
-  const [loading, setLoading] = useState<boolean>(false);
+  const [fetching, setfetching] = useState<boolean>(false);
+  const [syncing, setsyncing] = useState<boolean>(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const { name, value } = e.target;
@@ -56,8 +57,8 @@ function App() {
     });
   };
 
-  const handleDownload = async (): Promise<void> => {
-    setLoading(true);
+  const handlefetching = async (): Promise<void> => {
+    setfetching(true);
     try {
       const payload = {
         ...formData,
@@ -65,7 +66,7 @@ function App() {
         created_at_max: formData.created_at_max?.toISOString() || null,
       };
 
-      const response = await fetch("http://127.0.0.1:8000/api/download/", {
+      const response = await fetch("http://127.0.0.1:8000/api/fetch/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -74,7 +75,7 @@ function App() {
       });
 
       if (response.ok) {
-        alert("Data downloaded successfully.");
+        alert("Data fetched successfully.");
         // const blob = await response.blob();
         // const url = window.URL.createObjectURL(blob);
         // const a = document.createElement("a");
@@ -85,13 +86,46 @@ function App() {
       } else {
         const errorData = await response.json();
         console.error("Error:", errorData);
-        alert("Failed to download data. Check your credentials.");
+        alert("Failed to fetch data. Check your credentials.");
       }
     } catch (error) {
       console.error("Error:", error);
-      alert("An error occurred while downloading data.");
+      alert("An error occurred while detch data.");
     } finally {
-      setLoading(false);
+      setfetching(false);
+    }
+  };
+
+
+  const handlesyncing = async (): Promise<void> => {
+    setsyncing(true);
+    try {
+      const payload = {
+        ...formData,
+        created_at_min: formData.created_at_min?.toISOString() || null,
+        created_at_max: formData.created_at_max?.toISOString() || null,
+      };
+
+      const response = await fetch("http://127.0.0.1:8000/api/sync_data/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        alert("Data syncing successfully.");
+      } else {
+        const errorData = await response.json();
+        console.error("Error:", errorData);
+        alert("Failed to sync data. Check your credentials.");
+      }
+    } catch (error) {
+      console.error("Error:", error);
+      alert("An error occurred while syncing data.");
+    } finally {
+      setsyncing(false);
     }
   };
 
@@ -215,18 +249,32 @@ function App() {
           </div>
           
 
-        <div className="px-4 py-4 sm:px-6">
+        <div className="px-4 py-4 flex gap-2 sm:px-6">
           <button
             type="button"
-            onClick={handleDownload}
-            disabled={loading}
+            onClick={handlefetching}
+            disabled={fetching}
             className={`rounded-md px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
-              loading
+              fetching
                 ? "bg-gray-400 cursor-not-allowed"
                 : "bg-indigo-600 hover:bg-indigo-500 focus-visible:outline-indigo-600"
             }`}
           >
-            {loading ? "Downloading..." : "Download Data"}
+            {fetching ? "Fetching..." : "Fetch Data"}
+          </button>
+
+          <button
+            type="button"
+            onClick={handlesyncing}
+            value="sync_data"
+            disabled={syncing}
+            className={`rounded-md px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
+              syncing
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-red-600 hover:bg-red-500 focus-visible:outline-red-600"
+            }`}
+          >
+            {syncing ? "Syncing..." : "Sync Data"}
           </button>
         </div>
       </div>
