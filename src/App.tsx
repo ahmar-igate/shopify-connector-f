@@ -3,7 +3,7 @@ import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import "./App.css";
 import ApiVersion from "./components/combobox";
-import { XCircleIcon } from "@heroicons/react/20/solid";
+import { XCircleIcon, ArrowPathIcon } from "@heroicons/react/20/solid";
 import Notification from "./components/Notification";
 
 interface FormData {
@@ -13,13 +13,14 @@ interface FormData {
   api_version: string;
   created_at_min: Date | null;
   created_at_max: Date | null;
+  fetchsync: boolean;
 }
 
 interface StoreOrderDate {
   store_name: string;
   created_at_min_shopify: string;
   created_at_max_shopify: string;
-  updated_at: string; 
+  updated_at: string;
 }
 
 interface FormattedActivity {
@@ -47,11 +48,14 @@ function App() {
     api_version: "2025-01",
     created_at_min: null,
     created_at_max: null,
+    fetchsync: false,
   });
 
   const [fetching, setFetching] = useState<boolean>(false);
   const [syncing, setSyncing] = useState<boolean>(false);
   const [errors, setErrors] = useState<string[]>([]);
+  const [refresh, setRefresh] = useState<boolean>(false);
+  const [lastRefreshed, setLastRefreshed] = useState<string | null>(null);
   const [notification, setNotification] = useState<{
     show: boolean;
     message: string;
@@ -63,8 +67,14 @@ function App() {
 
   const validateForm = (isFetching: boolean): boolean => {
     const newErrors: string[] = [];
-    const { api_key, password, store_url, created_at_min, created_at_max } =
-      formData;
+    const {
+      api_key,
+      password,
+      store_url,
+      created_at_min,
+      created_at_max,
+      fetchsync,
+    } = formData;
 
     if (!api_key || !password || !store_url) {
       newErrors.push("API Key, Password, and Store URL are required fields.");
@@ -88,14 +98,13 @@ function App() {
       );
     }
 
-    if (
-      isFetching &&
-      (!created_at_min || !created_at_max) &&
-      (created_at_min === null || created_at_max === null)
-    ) {
-      newErrors.push(
-        "Both Start Date and End Date are required for Fetch Data."
-      );
+    // Check start and end date only if fetchsync is NOT checked
+    if (isFetching && !fetchsync) {
+      if (!created_at_min || !created_at_max) {
+        newErrors.push(
+          "Both Start Date and End Date are required for Fetch Data."
+        );
+      }
     }
 
     setErrors(newErrors);
@@ -103,8 +112,22 @@ function App() {
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    const { name, type, checked, value } = e.target;
+
+    setFormData((prev) => {
+      const updatedForm = {
+        ...prev,
+        [name]: type === "checkbox" ? checked : value,
+      };
+
+      // If fetchsync is checked, clear the date fields
+      if (name === "fetchsync" && checked) {
+        updatedForm.created_at_min = null;
+        updatedForm.created_at_max = null;
+      }
+
+      return updatedForm;
+    });
   };
 
   const handleApiVersionChange = (version: string): void => {
@@ -133,43 +156,56 @@ function App() {
 
   const handleDefault = async (): Promise<void> => {
     try {
+      setRefresh(true);
       const response = await fetch("http://127.0.0.1:8000/", {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
         },
       });
-  
-      const data: { 
+
+      const data: {
         store_order_dates: StoreOrderDate[];
         last_sync_min: string;
         last_sync_max: string;
       } = await response.json();
-  
+
       if (data.store_order_dates && data.store_order_dates.length > 0) {
         const formattedData: FormattedActivity[] = data.store_order_dates.map(
           (store: StoreOrderDate, index: number) => ({
             id: index + 1,
             store_name: store.store_name,
-            date: `${new Date(store.created_at_min_shopify).toLocaleString()} - ${new Date(store.created_at_max_shopify).toLocaleString()}`,
-            last_sync: `${new Date(data.last_sync_min).toLocaleString()} - ${new Date(data.last_sync_max).toLocaleString()} on ${new Date(store.updated_at).toLocaleString()}`,
+            date: `${new Date(
+              store.created_at_min_shopify
+            ).toLocaleString()} - ${new Date(
+              store.created_at_max_shopify
+            ).toLocaleString()}`,
+            last_sync: `${new Date(
+              data.last_sync_min
+            ).toLocaleString()} - ${new Date(
+              data.last_sync_max
+            ).toLocaleString()} on ${new Date(
+              store.updated_at
+            ).toLocaleString()}`,
             // updated_at: new Date(store.updated_at).toLocaleString(),
           })
         );
-  
+
         setActivities(formattedData);
       } else {
         console.warn("No store order dates found.");
       }
+      setLastRefreshed(new Date().toLocaleString());
     } catch (error) {
       console.error("Error fetching data:", error);
+    } finally {
+      setRefresh(false);
     }
   };
-  
+
   useEffect(() => {
     handleDefault();
   }, []);
-  
 
   const handleFetching = async (): Promise<void> => {
     if (!validateForm(true)) return;
@@ -243,7 +279,35 @@ function App() {
     <div className="flex items-center justify-center h-screen">
       <div className="container max-w-3xl sm:px-6 lg:px-8">
         <div className="rounded-lg bg-white shadow">
-          <div className="px-4 py-5 sm:px-6 font-medium border-b border-b-gray-200">Recent Activity</div>
+          <div className="px-4 py-5 sm:px-6 font-medium border-b border-b-gray-200 flex justify-between items-center">
+            <span>
+              Recent Activity <br />
+              {lastRefreshed && (
+                <p className="text-xs text-gray-600 mt-1">
+                  Last refreshed on: {lastRefreshed}
+                </p>
+              )}
+            </span>
+            <span>
+              <button
+                type="button"
+                onClick={handleDefault}
+                disabled={refresh}
+                className={`text-xs bg-slate-200 px-2.5 py-1 rounded hover:bg-slate-100 focus-visible:outline-slate-400 transition-all 
+                  ${refresh ? "cursor-not-allowed" : "cursor-pointer"}`}
+              >
+                <div className="flex items-center gap-1">
+                  <div className="shrink-0">
+                    <ArrowPathIcon
+                      aria-hidden="true"
+                      className="size-4 text-black"
+                    />
+                  </div>
+                  <div>{refresh ? "Refreshing..." : "Refresh"}</div>
+                </div>
+              </button>
+            </span>
+          </div>
           <div className="px-4 py-5 sm:p-6">
             <div className="overflow-x-auto max-w-full">
               {" "}
@@ -339,7 +403,9 @@ function App() {
           </div>
         )}
         <div className="divide-y divide-gray-200 rounded-lg bg-white shadow">
-          <div className="px-4 py-5 sm:px-6 font-medium">Shopify Credentials</div>
+          <div className="px-4 py-5 sm:px-6 font-medium">
+            Shopify Credentials
+          </div>
 
           <div className="flex">
             <div className="px-4 py-5 sm:p-6 flex-1">
@@ -432,8 +498,9 @@ function App() {
                       onChange={(date) =>
                         handleDateChange("created_at_min", date)
                       }
-                      className="block w-full rounded-md bg-white px-3 py-1.5 text-base text-gray-900 outline outline-1 -outline-offset-1 outline-gray-300 placeholder:text-gray-400 focus:outline focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-600 sm:text-sm"
+                      className="block w-full rounded-md bg-white px-3 py-1.5 text-base text-gray-900 outline outline-1 outline-gray-300 placeholder:text-gray-400 focus:outline focus:outline-2 focus:outline-indigo-600 sm:text-sm"
                       placeholderText="Select start date"
+                      disabled={formData.fetchsync} // Disable when fetchsync is checked
                     />
                   </div>
                 </div>
@@ -453,10 +520,62 @@ function App() {
                       onChange={(date) =>
                         handleDateChange("created_at_max", date)
                       }
-                      className="block w-full rounded-md bg-white px-3 py-1.5 text-base text-gray-900 outline outline-1 -outline-offset-1 outline-gray-300 placeholder:text-gray-400 focus:outline focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-600 sm:text-sm"
+                      className="block w-full rounded-md bg-white px-3 py-1.5 text-base text-gray-900 outline outline-1 outline-gray-300 placeholder:text-gray-400 focus:outline focus:outline-2 focus:outline-indigo-600 sm:text-sm"
                       placeholderText="Select end date"
+                      disabled={formData.fetchsync} // Disable when fetchsync is checked
                     />
                   </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="fullfetch_box">
+            <div className="px-4 py-5 sm:p-6">
+              <div className="flex gap-3">
+                <div className="flex h-6 shrink-0 items-center">
+                  <div className="group grid size-4 grid-cols-1">
+                    <input
+                      id="fetchsync"
+                      name="fetchsync"
+                      type="checkbox"
+                      value={formData.fetchsync.toString()}
+                      onChange={handleChange}
+                      aria-describedby="fetchsync-description"
+                      className="col-start-1 row-start-1 appearance-none rounded-sm border border-gray-300 bg-white checked:border-slate-600 checked:bg-slate-600 indeterminate:border-slate-600 indeterminate:bg-slate-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-600 disabled:border-gray-300 disabled:bg-gray-100 disabled:checked:bg-gray-100 forced-colors:appearance-auto"
+                    />
+                    <svg
+                      fill="none"
+                      viewBox="0 0 14 14"
+                      className="pointer-events-none col-start-1 row-start-1 size-3.5 self-center justify-self-center stroke-white group-has-disabled:stroke-gray-950/25"
+                    >
+                      <path
+                        d="M3 8L6 11L11 3.5"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="opacity-0 group-has-checked:opacity-100"
+                      />
+                      <path
+                        d="M3 7H11"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="opacity-0 group-has-indeterminate:opacity-100"
+                      />
+                    </svg>
+                  </div>
+                </div>
+                <div className="text-sm/6">
+                  <label
+                    htmlFor="fetchsync"
+                    className="font-medium text-gray-900"
+                  >
+                    Full Fetch & Sync
+                  </label>{" "}
+                  <span id="fetchsync-description" className="text-gray-500">
+                    <span className="sr-only">fetchsync </span>select to fetch
+                    or sync full data from shopify.
+                  </span>
                 </div>
               </div>
             </div>
