@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import "./App.css";
@@ -15,12 +15,28 @@ interface FormData {
   created_at_max: Date | null;
 }
 
+interface StoreOrderDate {
+  store_name: string;
+  created_at_min_shopify: string;
+  created_at_max_shopify: string;
+  updated_at: string; 
+}
+
+interface FormattedActivity {
+  id: number;
+  store_name: string;
+  date: string;
+  last_sync: string;
+  // updated_at: string;
+}
+
 const VALID_STORE_URLS = [
   "rdx-sports-store.myshopify.com",
   "rdx-sports-store-europe.myshopify.com",
   "rdx-sports-store-usa.myshopify.com",
   "rdx-sports-store-canada.myshopify.com",
   "rdx-sports-middle-east.myshopify.com",
+  "rdx-sports-store-global.myshopify.com",
 ];
 
 function App() {
@@ -36,10 +52,14 @@ function App() {
   const [fetching, setFetching] = useState<boolean>(false);
   const [syncing, setSyncing] = useState<boolean>(false);
   const [errors, setErrors] = useState<string[]>([]);
-  const [notification, setNotification] = useState<{ show: boolean; message: string }>({
+  const [notification, setNotification] = useState<{
+    show: boolean;
+    message: string;
+  }>({
     show: false,
     message: "",
   });
+  const [activities, setActivities] = useState<FormattedActivity[]>([]);
 
   const validateForm = (isFetching: boolean): boolean => {
     const newErrors: string[] = [];
@@ -111,6 +131,46 @@ function App() {
     });
   };
 
+  const handleDefault = async (): Promise<void> => {
+    try {
+      const response = await fetch("http://127.0.0.1:8000/", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+  
+      const data: { 
+        store_order_dates: StoreOrderDate[];
+        last_sync_min: string;
+        last_sync_max: string;
+      } = await response.json();
+  
+      if (data.store_order_dates && data.store_order_dates.length > 0) {
+        const formattedData: FormattedActivity[] = data.store_order_dates.map(
+          (store: StoreOrderDate, index: number) => ({
+            id: index + 1,
+            store_name: store.store_name,
+            date: `${new Date(store.created_at_min_shopify).toLocaleString()} - ${new Date(store.created_at_max_shopify).toLocaleString()}`,
+            last_sync: `${new Date(data.last_sync_min).toLocaleString()} - ${new Date(data.last_sync_max).toLocaleString()} on ${new Date(store.updated_at).toLocaleString()}`,
+            // updated_at: new Date(store.updated_at).toLocaleString(),
+          })
+        );
+  
+        setActivities(formattedData);
+      } else {
+        console.warn("No store order dates found.");
+      }
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    }
+  };
+  
+  useEffect(() => {
+    handleDefault();
+  }, []);
+  
+
   const handleFetching = async (): Promise<void> => {
     if (!validateForm(true)) return;
 
@@ -134,7 +194,6 @@ function App() {
       if (response.ok) {
         setErrors([]); // Clear errors on success
         setNotification({ show: true, message: "Data fetched successfully!" });
-
       } else {
         setErrors([responseData.message || "Failed to save data."]);
       }
@@ -183,6 +242,68 @@ function App() {
   return (
     <div className="flex items-center justify-center h-screen">
       <div className="container max-w-3xl sm:px-6 lg:px-8">
+        <div className="rounded-lg bg-white shadow">
+          <div className="px-4 py-5 sm:px-6 font-medium border-b border-b-gray-200">Recent Activity</div>
+          <div className="px-4 py-5 sm:p-6">
+            <div className="overflow-x-auto max-w-full">
+              {" "}
+              {/* Add scrolling wrapper */}
+              <table className="w-full min-w-max divide-y divide-gray-300">
+                {" "}
+                {/* proper width */}
+                <thead>
+                  <tr>
+                    <th
+                      scope="col"
+                      className="py-3.5 pr-3 pl-4 text-left text-sm font-semibold whitespace-nowrap text-gray-900 sm:pl-0"
+                    >
+                      #
+                    </th>
+                    <th
+                      scope="col"
+                      className="py-3.5 pr-3 pl-4 text-left text-sm font-semibold whitespace-nowrap text-gray-900 sm:pl-0"
+                    >
+                      Store
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-2 py-3.5 text-left text-sm font-semibold whitespace-nowrap text-gray-900"
+                    >
+                      Fetched Orders
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-2 py-3.5 text-left text-sm font-semibold whitespace-nowrap text-gray-900"
+                    >
+                      Last Synced Data
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {activities.map((activity) => (
+                    <tr key={activity.id}>
+                      <td className="py-2 px-4 text-sm whitespace-nowrap text-gray-500">
+                        {activity.id}
+                      </td>
+                      <td className="py-2 px-4 text-sm whitespace-nowrap text-gray-500">
+                        {activity.store_name}
+                      </td>
+                      <td className="px-2 py-2 text-sm whitespace-nowrap text-gray-900">
+                        {activity.date}
+                      </td>
+                      <td className="px-2 py-2 text-sm whitespace-nowrap text-gray-900">
+                        {activity.last_sync}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="container max-w-3xl sm:px-6 lg:px-8">
         {notification.show && <Notification message={notification.message} />}
         {errors.length > 0 && (
           <div className="relative rounded-md bg-red-50 p-4 mb-4">
@@ -218,7 +339,7 @@ function App() {
           </div>
         )}
         <div className="divide-y divide-gray-200 rounded-lg bg-white shadow">
-          <div className="px-4 py-5 sm:px-6">Shopify Credentials</div>
+          <div className="px-4 py-5 sm:px-6 font-medium">Shopify Credentials</div>
 
           <div className="flex">
             <div className="px-4 py-5 sm:p-6 flex-1">
@@ -316,7 +437,7 @@ function App() {
                     />
                   </div>
                 </div>
-                <small className="text-red-800">
+                <small className="text-gray-500">
                   Start and End dates are not required for sync operations
                 </small>
               </div>
@@ -341,33 +462,41 @@ function App() {
             </div>
           </div>
 
-          <div className="px-4 py-4 flex gap-2 sm:px-6">
-            <button
-              type="button"
-              onClick={handleFetching}
-              disabled={fetching}
-              className={`rounded-md px-4 py-1.5 text-xs font-semibold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
-                fetching
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-indigo-600 hover:bg-indigo-500 focus-visible:outline-indigo-600"
-              }`}
-            >
-              {fetching ? "Fetching..." : "Fetch Data"}
-            </button>
+          <div className="px-4 py-4 flex justify-between sm:px-6">
+            <div className="buttons flex gap-2">
+              <button
+                type="button"
+                onClick={handleFetching}
+                disabled={fetching || syncing}
+                className={`rounded-md px-4 py-1.5 text-xs font-semibold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
+                  fetching || syncing
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-indigo-600 hover:bg-indigo-500 focus-visible:outline-indigo-600"
+                }`}
+              >
+                {fetching ? "Fetching..." : "Fetch Data"}
+              </button>
 
-            <button
-              type="button"
-              onClick={handleSyncing}
-              value="sync_data"
-              disabled={syncing}
-              className={`rounded-md px-4 py-1.5 text-xs font-semibold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
-                syncing
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-red-600 hover:bg-red-500 focus-visible:outline-red-600"
-              }`}
-            >
-              {syncing ? "Syncing..." : "Sync Data"}
-            </button>
+              <button
+                type="button"
+                onClick={handleSyncing}
+                value="sync_data"
+                disabled={syncing || fetching}
+                className={`rounded-md px-4 py-1.5 text-xs font-semibold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
+                  syncing || fetching
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-red-600 hover:bg-red-500 focus-visible:outline-red-600"
+                }`}
+              >
+                {syncing ? "Syncing..." : "Sync Data"}
+              </button>
+            </div>
+            <div className="updates flex flex-col text-xs text-gray-500">
+              <span>
+                {/* {`Fetched Orders: ${FetchedMin?.toLocaleString()} to ${FetchedMax?.toLocaleString()}`} */}
+              </span>
+              {/* <span>Last Sync: 2021-09-01 12:00:00 to 2021-09-30 12:00:00</span> */}
+            </div>
           </div>
         </div>
       </div>
