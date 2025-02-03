@@ -404,7 +404,7 @@ function App() {
         )}
         <div className="divide-y divide-gray-200 rounded-lg bg-white shadow">
           <div className="px-4 py-5 sm:px-6 font-medium">
-            Shopify Credentials
+            Shopify Connection
           </div>
 
           <div className="flex">
@@ -609,12 +609,6 @@ function App() {
               >
                 {syncing ? "Syncing..." : "Sync Data"}
               </button>
-            </div>
-            <div className="updates flex flex-col text-xs text-gray-500">
-              <span>
-                {/* {`Fetched Orders: ${FetchedMin?.toLocaleString()} to ${FetchedMax?.toLocaleString()}`} */}
-              </span>
-              {/* <span>Last Sync: 2021-09-01 12:00:00 to 2021-09-30 12:00:00</span> */}
             </div>
           </div>
         </div>
